@@ -5,6 +5,7 @@
 
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import axios from '@/api/axiosInstance';
+import { logout } from '@/features/auth/authSlice';
 
 // ── Async thunks ─────────────────────────────────────────────────────────────
 
@@ -46,20 +47,24 @@ export const markAllNotificationsRead = createAsyncThunk(
 
 // ── Slice ─────────────────────────────────────────────────────────────────────
 
+const initialState = {
+  items: [],
+  unreadCount: 0,
+  status: 'idle', // 'idle' | 'loading' | 'succeeded' | 'failed'
+  error: null,
+};
+
 const notificationsSlice = createSlice({
   name: 'notifications',
-  initialState: {
-    items: [],
-    unreadCount: 0,
-    status: 'idle', // 'idle' | 'loading' | 'succeeded' | 'failed'
-    error: null,
-  },
+  initialState,
   reducers: {
     // Push a single new notification (e.g. from a WebSocket or polling)
     addNotification(state, action) {
       state.items.unshift(action.payload);
       if (!action.payload.read) state.unreadCount += 1;
     },
+    // Manually wipe all notifications (e.g. called on user-switch)
+    resetNotifications: () => initialState,
   },
   extraReducers: (builder) => {
     builder
@@ -88,11 +93,15 @@ const notificationsSlice = createSlice({
       .addCase(markAllNotificationsRead.fulfilled, (state) => {
         state.items.forEach(n => { n.read = true; });
         state.unreadCount = 0;
-      });
+      })
+      // ── Clear notifications when any user logs out ─────────────────────────
+      // Without this, the previous account's notifications remain in the Redux
+      // store and are shown to the next user who logs in on the same browser.
+      .addCase(logout.fulfilled, () => initialState);
   },
 });
 
-export const { addNotification } = notificationsSlice.actions;
+export const { addNotification, resetNotifications } = notificationsSlice.actions;
 
 // ── Selectors ─────────────────────────────────────────────────────────────────
 export const selectNotifications    = (s) => s.notifications.items;
